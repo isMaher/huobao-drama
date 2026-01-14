@@ -1,24 +1,25 @@
 <template>
-  <div class="page-container">
-    <div class="content-wrapper animate-fade-in">
-      <!-- Page Header / 页面头部 -->
-      <PageHeader
-        :title="$t('aiConfig.title')"
-        :subtitle="$t('aiConfig.subtitle') || '管理 AI 服务配置'"
-        :show-back="true"
-        :back-text="$t('common.back')"
-      >
-        <template #actions>
-          <el-button type="primary" @click="showCreateDialog">
-            <el-icon><Plus /></el-icon>
-            <span>{{ $t('aiConfig.addConfig') }}</span>
-          </el-button>
-        </template>
-      </PageHeader>
+  <el-dialog
+    v-model="visible"
+    :title="$t('aiConfig.title')"
+    width="900px"
+    :close-on-click-modal="false"
+    destroy-on-close
+    class="ai-config-dialog"
+  >
+    <!-- Dialog Header Actions -->
+    <template #header>
+      <div class="dialog-header">
+        <span class="dialog-title">{{ $t('aiConfig.title') }}</span>
+        <el-button type="primary" size="small" @click="showCreateDialog">
+          <el-icon><Plus /></el-icon>
+          <span>{{ $t('aiConfig.addConfig') }}</span>
+        </el-button>
+      </div>
+    </template>
 
-      <!-- Tabs / 标签页 -->
-      <div class="tabs-wrapper">
-        <el-tabs v-model="activeTab" @tab-change="handleTabChange" class="config-tabs">
+    <!-- Tabs -->
+    <el-tabs v-model="activeTab" @tab-change="handleTabChange" class="config-tabs">
       <el-tab-pane :label="$t('aiConfig.tabs.text')" name="text">
         <ConfigList 
           :configs="configs" 
@@ -52,15 +53,15 @@
           @toggle-active="handleToggleActive"
         />
       </el-tab-pane>
-        </el-tabs>
-      </div>
+    </el-tabs>
 
-      <!-- Edit/Create Dialog / 编辑创建弹窗 -->
-      <el-dialog
-      v-model="dialogVisible"
+    <!-- Edit/Create Sub-Dialog -->
+    <el-dialog
+      v-model="editDialogVisible"
       :title="isEdit ? $t('aiConfig.editConfig') : $t('aiConfig.addConfig')"
       width="600px"
       :close-on-click-modal="false"
+      append-to-body
     >
       <el-form
         ref="formRef"
@@ -148,33 +149,41 @@
       </el-form>
 
       <template #footer>
-        <el-button @click="dialogVisible = false">{{ $t('common.cancel') }}</el-button>
+        <el-button @click="editDialogVisible = false">{{ $t('common.cancel') }}</el-button>
         <el-button v-if="form.service_type === 'text'" @click="testConnection" :loading="testing">{{ $t('aiConfig.actions.test') }}</el-button>
         <el-button type="primary" @click="handleSubmit" :loading="submitting">
           {{ isEdit ? $t('common.save') : $t('common.create') }}
         </el-button>
       </template>
     </el-dialog>
-    </div>
-  </div>
+  </el-dialog>
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted, computed } from 'vue'
-import { useRouter } from 'vue-router'
+import { ref, reactive, computed, watch } from 'vue'
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
-import { Plus, ArrowLeft } from '@element-plus/icons-vue'
+import { Plus } from '@element-plus/icons-vue'
 import { aiAPI } from '@/api/ai'
-import { PageHeader } from '@/components/common'
 import type { AIServiceConfig, AIServiceType, CreateAIConfigRequest, UpdateAIConfigRequest } from '@/types/ai'
-import ConfigList from './components/ConfigList.vue'
+import ConfigList from '@/views/settings/components/ConfigList.vue'
 
-const router = useRouter()
+const props = defineProps<{
+  modelValue: boolean
+}>()
+
+const emit = defineEmits<{
+  'update:modelValue': [value: boolean]
+}>()
+
+const visible = computed({
+  get: () => props.modelValue,
+  set: (val) => emit('update:modelValue', val)
+})
 
 const activeTab = ref<AIServiceType>('text')
 const loading = ref(false)
 const configs = ref<AIServiceConfig[]>([])
-const dialogVisible = ref(false)
+const editDialogVisible = ref(false)
 const isEdit = ref(false)
 const editingId = ref<number>()
 const formRef = ref<FormInstance>()
@@ -187,12 +196,12 @@ const form = reactive<CreateAIConfigRequest & { is_active?: boolean, provider?: 
   name: '',
   base_url: '',
   api_key: '',
-  model: [],  // 改为数组支持多选
-  priority: 0,  // 默认优先级为0
+  model: [],
+  priority: 0,
   is_active: true
 })
 
-// 厂商和模型配置
+// Provider configs
 interface ProviderConfig {
   id: string
   name: string
@@ -219,35 +228,24 @@ const providerConfigs: Record<AIServiceType, ProviderConfig[]> = {
     { 
       id: 'gemini', 
       name: 'Google Gemini', 
-      models: [
-        'gemini-2.5-pro',
-        'gemini-3-pro-preview'
-      ]
+      models: ['gemini-2.5-pro', 'gemini-3-pro-preview']
     }
   ],
   image: [
     { 
       id: 'volcengine', 
       name: '火山引擎', 
-      models: [
-        'doubao-seedream-4-5-251128',
-        'doubao-seedream-4-0-250828',
-      ]
+      models: ['doubao-seedream-4-5-251128', 'doubao-seedream-4-0-250828']
     },
     { 
       id: 'chatfire', 
       name: 'Chatfire', 
-      models: [
-        'doubao-seedream-4-5-251128',
-        'nano-banana-pro',
-      ]
+      models: ['doubao-seedream-4-5-251128', 'nano-banana-pro']
     },
     { 
       id: 'gemini', 
       name: 'Google Gemini', 
-      models: [
-        'gemini-3-pro-image-preview',
-      ]
+      models: ['gemini-3-pro-image-preview']
     },
     { id: 'openai', name: 'OpenAI', models: ['dall-e-3', 'dall-e-2'] }
   ],
@@ -276,24 +274,20 @@ const providerConfigs: Record<AIServiceType, ProviderConfig[]> = {
         'sora-pro'
       ]
     },
-    { id: 'openai', name: 'OpenAI', models: ['sora-2', 'sora-2-pro'] },
-//    { id: 'minimax', name: 'MiniMax', models: ['MiniMax-Hailuo-2.3', 'MiniMax-Hailuo-2.3-Fast', 'MiniMax-Hailuo-02'] }
+    { id: 'openai', name: 'OpenAI', models: ['sora-2', 'sora-2-pro'] }
   ]
 }
 
-// 当前可用的厂商列表
 const availableProviders = computed(() => {
   return providerConfigs[form.service_type] || []
 })
 
-// 当前可用的模型列表
 const availableModels = computed(() => {
   if (!form.provider) return []
   const provider = availableProviders.value.find(p => p.id === form.provider)
   return provider?.models || []
 })
 
-// 完整端点示例
 const fullEndpointExample = computed(() => {
   const baseUrl = form.base_url || 'https://api.example.com'
   const provider = form.provider
@@ -329,35 +323,27 @@ const fullEndpointExample = computed(() => {
 })
 
 const rules: FormRules = {
-  name: [
-    { required: true, message: '请输入配置名称', trigger: 'blur' }
-  ],
-  provider: [
-    { required: true, message: '请选择厂商', trigger: 'change' }
-  ],
+  name: [{ required: true, message: '请输入配置名称', trigger: 'blur' }],
+  provider: [{ required: true, message: '请选择厂商', trigger: 'change' }],
   base_url: [
     { required: true, message: '请输入 Base URL', trigger: 'blur' },
     { type: 'url', message: '请输入正确的 URL 格式', trigger: 'blur' }
   ],
-  api_key: [
-    { required: true, message: '请输入 API Key', trigger: 'blur' }
-  ],
-  model: [
-    { 
-      required: true, 
-      message: '请至少选择一个模型', 
-      trigger: 'change',
-      validator: (rule: any, value: any, callback: any) => {
-        if (Array.isArray(value) && value.length > 0) {
-          callback()
-        } else if (typeof value === 'string' && value.length > 0) {
-          callback()
-        } else {
-          callback(new Error('请至少选择一个模型'))
-        }
+  api_key: [{ required: true, message: '请输入 API Key', trigger: 'blur' }],
+  model: [{
+    required: true,
+    message: '请至少选择一个模型',
+    trigger: 'change',
+    validator: (rule: any, value: any, callback: any) => {
+      if (Array.isArray(value) && value.length > 0) {
+        callback()
+      } else if (typeof value === 'string' && value.length > 0) {
+        callback()
+      } else {
+        callback(new Error('请至少选择一个模型'))
       }
     }
-  ]
+  }]
 }
 
 const loadConfigs = async () => {
@@ -371,7 +357,6 @@ const loadConfigs = async () => {
   }
 }
 
-// 生成随机配置名称
 const generateConfigName = (provider: string, serviceType: AIServiceType): string => {
   const providerNames: Record<string, string> = {
     'chatfire': 'ChatFire',
@@ -398,13 +383,10 @@ const showCreateDialog = () => {
   editingId.value = undefined
   resetForm()
   form.service_type = activeTab.value
-  // 默认选择 chatfire
   form.provider = 'chatfire'
-  // 设置默认 base_url
   form.base_url = 'https://api.chatfire.site/v1'
-  // 自动生成随机配置名称
   form.name = generateConfigName('chatfire', activeTab.value)
-  dialogVisible.value = true
+  editDialogVisible.value = true
 }
 
 const handleEdit = (config: AIServiceConfig) => {
@@ -413,15 +395,15 @@ const handleEdit = (config: AIServiceConfig) => {
   
   Object.assign(form, {
     service_type: config.service_type,
-    provider: config.provider || 'chatfire',  // 直接使用配置中的 provider，默认为 chatfire
+    provider: config.provider || 'chatfire',
     name: config.name,
     base_url: config.base_url,
     api_key: config.api_key,
-    model: Array.isArray(config.model) ? config.model : [config.model],  // 统一转换为数组
+    model: Array.isArray(config.model) ? config.model : [config.model],
     priority: config.priority || 0,
     is_active: config.is_active
   })
-  dialogVisible.value = true
+  editDialogVisible.value = true
 }
 
 const handleDelete = async (config: AIServiceConfig) => {
@@ -517,7 +499,7 @@ const handleSubmit = async () => {
         ElMessage.success('创建成功')
       }
       
-      dialogVisible.value = false
+      editDialogVisible.value = false
       loadConfigs()
     } catch (error: any) {
       ElMessage.error(error.message || '操作失败')
@@ -528,41 +510,21 @@ const handleSubmit = async () => {
 }
 
 const handleTabChange = (tabName: string | number) => {
-  // 标签页切换时重新加载对应服务类型的配置
   activeTab.value = tabName as AIServiceType
   loadConfigs()
 }
 
 const handleProviderChange = () => {
-  // 切换厂商时清空已选模型
   form.model = []
   
-  // 根据厂商自动设置默认 base_url
   if (form.provider === 'gemini' || form.provider === 'google') {
     form.base_url = 'https://api.chatfire.site'
   } else {
-    // openai, chatfire 等其他厂商
     form.base_url = 'https://api.chatfire.site/v1'
   }
   
-  // 仅在新建配置时自动更新名称
   if (!isEdit.value) {
     form.name = generateConfigName(form.provider, form.service_type)
-  }
-}
-
-// getDefaultEndpoint 已移除，端点由后端根据 provider 自动设置
-// 保留该函数定义以避免编译错误
-const getDefaultEndpoint = (serviceType: AIServiceType): string => {
-  switch (serviceType) {
-    case 'text':
-      return ''
-    case 'image':
-      return '/v1/images/generations'
-    case 'video':
-      return '/v1/video/generations'
-    default:
-      return '/v1/chat/completions'
   }
 }
 
@@ -574,120 +536,64 @@ const resetForm = () => {
     name: '',
     base_url: '',
     api_key: '',
-    model: [],  // 改为空数组
+    model: [],
     priority: 0,
     is_active: true
   })
   formRef.value?.resetFields()
 }
 
-const goBack = () => {
-  router.back()
-}
-
-onMounted(() => {
-  loadConfigs()
+// Load configs when dialog opens
+watch(visible, (val) => {
+  if (val) {
+    loadConfigs()
+  }
 })
 </script>
 
 <style scoped>
-/* ========================================
-   Page Layout / 页面布局 - 紧凑边距
-   ======================================== */
-.page-container {
-  min-height: 100vh;
-  background: var(--bg-primary);
-  padding: var(--space-2) var(--space-3);
-  transition: background var(--transition-normal);
+.ai-config-dialog :deep(.el-dialog__header) {
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border-primary);
+  margin-right: 0;
 }
 
-@media (min-width: 768px) {
-  .page-container {
-    padding: var(--space-3) var(--space-4);
-  }
+.dialog-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding-right: 32px;
 }
 
-@media (min-width: 1024px) {
-  .page-container {
-    padding: var(--space-4) var(--space-5);
-  }
+.dialog-title {
+  font-size: 1.125rem;
+  font-weight: 600;
+  color: var(--text-primary);
 }
 
-.content-wrapper {
-  max-width: 1200px;
-  margin: 0 auto;
+.ai-config-dialog :deep(.el-dialog__body) {
+  padding: 20px;
+  max-height: 60vh;
+  overflow-y: auto;
 }
 
-/* ========================================
-   Tabs / 标签页 - 紧凑内边距
-   ======================================== */
-.tabs-wrapper {
-  background: var(--bg-card);
-  border: 1px solid var(--border-primary);
-  border-radius: var(--radius-lg);
-  padding: var(--space-3);
-  box-shadow: var(--shadow-card);
+.config-tabs {
+  margin: 0;
 }
 
-@media (min-width: 768px) {
-  .tabs-wrapper {
-    padding: var(--space-4);
-  }
-}
-
-/* ========================================
-   Form Tips / 表单提示
-   ======================================== */
 .form-tip {
   font-size: 0.75rem;
   color: var(--text-muted);
   margin-top: 0.25rem;
 }
 
-/* ========================================
-   Dialog / 弹窗
-   ======================================== */
-:deep(.el-dialog) {
-  border-radius: 0.75rem;
-}
-
-:deep(.el-dialog__header) {
-  padding: 1.25rem 1.5rem;
-  border-bottom: 1px solid var(--border-primary);
-  margin-right: 0;
-}
-
-:deep(.el-dialog__title) {
-  font-size: 1.125rem;
-  font-weight: 600;
-  color: var(--text-primary);
-}
-
-:deep(.el-dialog__body) {
-  padding: 1.5rem;
-}
-
-:deep(.el-dialog__footer) {
-  padding: 1rem 1.5rem;
-  border-top: 1px solid var(--border-primary);
-}
-
-/* ========================================
-   Dark Mode / 深色模式
-   ======================================== */
-.dark .tabs-wrapper {
+/* Dark mode */
+.dark .ai-config-dialog :deep(.el-dialog) {
   background: var(--bg-card);
 }
 
-.dark :deep(.el-dialog) {
-  background: var(--bg-card);
-}
-
-.dark :deep(.el-dialog__header) {
-  background: var(--bg-card);
-}
-
-.dark :deep(.el-dialog__body) {
+.dark .ai-config-dialog :deep(.el-dialog__header) {
   background: var(--bg-card);
 }
 
@@ -704,37 +610,7 @@ onMounted(() => {
   color: var(--text-primary);
 }
 
-.dark :deep(.el-input__inner::placeholder) {
-  color: var(--text-muted);
-}
-
 .dark :deep(.el-select .el-input__wrapper) {
   background: var(--bg-secondary);
-}
-
-.dark :deep(.el-textarea__inner) {
-  background: var(--bg-secondary);
-  color: var(--text-primary);
-  box-shadow: 0 0 0 1px var(--border-primary) inset;
-}
-
-.dark :deep(.el-input-number) {
-  background: var(--bg-secondary);
-}
-
-.dark :deep(.el-switch__core) {
-  background: var(--bg-secondary);
-  border-color: var(--border-primary);
-}
-
-.dark :deep(.el-button--default) {
-  background: var(--bg-secondary);
-  border-color: var(--border-primary);
-  color: var(--text-primary);
-}
-
-.dark :deep(.el-button--default:hover) {
-  background: var(--bg-card-hover);
-  border-color: var(--border-secondary);
 }
 </style>
